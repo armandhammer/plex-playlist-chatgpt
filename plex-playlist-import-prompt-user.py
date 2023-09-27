@@ -14,6 +14,10 @@
 # 4) there's fuzzy matching of the tracks with an 85% default. Change FUZZ_AMT if you're
 # not getting the expected results.
 
+# If you want to add the playlist to an admin account and not prompt for a user, see 
+# the revised main() function posted as a separate file in the repo, and cut-and-paste
+# that code in place of the main() at the end of this script.
+
 
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
