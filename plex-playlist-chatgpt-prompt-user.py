@@ -135,46 +135,33 @@ def add_track_to_playlist(plex_url: str, plex_token: str, tidal_ids: list, playl
     if not tidal_ids:
         print("Cannot add tracks to a playlist with no Tidal IDs.")
         return
-
-    tidal_id_str = "%2C".join(tidal_ids)
-    add_to_playlist_url = f"{plex_url}/playlists/{playlist_ratingKey}/items?uri=provider%3A%2F%2Ftv.plex.provider.music%2Flibrary%2Fmetadata%2F{tidal_id_str}"
-    response = requests.put(add_to_playlist_url, headers={'X-Plex-Token': plex_token})
-
-    if response.status_code == 200:
-        print("Tidal tracks added to the playlist successfully.")
-    else:
-        print(f"Server says adding Tidal tracks to playlist: {response.status_code}")
-
-from plexapi.exceptions import NotFound
-from plexapi.myplex import MyPlexAccount
+    
+    BATCH_SIZE = 20  # or another appropriate batch size
+    
+    for i in range(0, len(tidal_ids), BATCH_SIZE):
+        batch_ids = tidal_ids[i:i + BATCH_SIZE]
+        tidal_id_str = "%2C".join(batch_ids)
+        add_to_playlist_url = f"{plex_url}/playlists/{playlist_ratingKey}/items?uri=provider%3A%2F%2Ftv.plex.provider.music%2Flibrary%2Fmetadata%2F{tidal_id_str}"
+        
+        response = requests.put(add_to_playlist_url, headers={'X-Plex-Token': plex_token})
+        
+        if response.status_code == 200:
+            print(f"Tidal tracks added to the playlist successfully in batch {i//BATCH_SIZE + 1}.")
+        else:
+            print(f"Server says adding Tidal tracks to playlist in batch {i//BATCH_SIZE + 1}: {response.status_code}")
+            print(response.text)
 
 def main():
-    admin_username = ADMIN_NAME
-    admin_password = ADMIN_PASS
-    user_account = input("Enter the account to add the playlist to: ")
-    
     # Initialize Plex Server with admin token
     plex = PlexServer(PLEX_URL, PLEX_TOKEN)
-    
-    # If the user_account entered is not 'admin', try to get the non-admin user
-    if user_account.lower() != ADMIN_NAME:
-        account = MyPlexAccount(admin_username, admin_password)  # Authenticate with MyPlexAccount
-        
-        try:
-            user = account.user(user_account)  # Try to get non-admin user
-            user_token = user.get_token(plex.machineIdentifier)
-            plex = PlexServer(PLEX_URL, user_token)  # reinitialize plex with user’s token
-        except NotFound:  # Catch the NotFound exception if user is not found
-            print(f"Error: Unable to find user {user_account}")
-            exit()
-    
+
     # Proceeding with the rest of the logic
     music_library = get_music_library(plex, SECTION_TITLE)
     songs = read_songs_from_file(FILENAME)
     playlist_name = input("Please enter the name for the new playlist: ")
     items = []
     tidal_ids = []
-    
+
     for song_name in songs:
         artist, title = song_name.split(' - ')
         local_track = find_track_in_library(music_library, artist, title)
@@ -188,7 +175,7 @@ def main():
                 print(f"Adding to playlist (Tidal): Artist: {artist}, Title: {title}, Tidal ID: {tidal_id}")
             else:
                 print(f"No local or Tidal track found for '{artist} - {title}'.")
-    
+
     if items or tidal_ids:
         try:
             if items:
