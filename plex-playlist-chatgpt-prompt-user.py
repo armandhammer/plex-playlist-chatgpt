@@ -114,7 +114,6 @@ def search_tidal(plex_token: str, artist: str, title: str):
     url = f"https://music.provider.plex.tv/hubs/search?query={quote(query)}&X-Plex-Token={plex_token}"
 
     response = requests.get(url)
-    print(url)
     if response.status_code != 200:
         print(f"Error: Unable to search Tidal: {response.status_code}")
         return None
@@ -124,9 +123,13 @@ def search_tidal(plex_token: str, artist: str, title: str):
 
     if track_hub is not None:
         for track in track_hub.findall('./Track'):
-            artist_title = track.get('grandparentTitle')
+            artist_title = track.get('originalTitle')
+            if artist_title is None or artist_title.lower() == "none":
+                artist_title = track.get('grandparentTitle')
             track_title = track.get('title')
             album_title = track.get('parentTitle')
+            print(f"grandparentTitle: {track.get('grandparentTitle')}")
+            print(f"originalTitle: {track.get('originalTitle')}")
 
             if re.search(date_pattern, album_title) or re.search(date_pattern, track_title) or any(
                 keyword.lower() in track_title.lower() or keyword.lower() in album_title.lower()
@@ -145,6 +148,8 @@ def search_tidal(plex_token: str, artist: str, title: str):
                 if tidal_id:
                     return tidal_id
     return None
+    
+
 
 
 def add_track_to_playlist(plex_url: str, plex_token: str, tidal_ids: list, playlist_ratingKey: str):
@@ -178,14 +183,28 @@ def main():
     playlist_name = input("Please enter the name for the new playlist: ")
     items = []
     tidal_ids = []
+    local_tracks_added = 0
+
+
+
+
+
+
+
+
+
+
+
 
     for song_name in songs:
         print("-" * 10)
         artist, title = song_name.split(' - ', 1)
         print(f"Processing {artist} - {title}")
         local_track = find_track_in_library(music_library, artist, title)
+
         if local_track:
             print("Found in local library.")
+            local_tracks_added += 1  # Increment the count for each added local track
         else:
             print("Not found in local library, searching on Tidal...")
             tidal_id = search_tidal(PLEX_TOKEN, artist, title)
@@ -221,7 +240,7 @@ def main():
         print("\nPlaylist Creation Summary:")
         print("-" * 30)  # Separator line for visual clarity
         print(f"Playlist Name: {playlist_name}")
-        print(f"Local Tracks Added: {local_count}")
+        print(f"Local Tracks Added: {local_tracks_added}")
         print(f"Tidal Tracks Added: {tidal_count}")
         print(f"Total Batches Processed: {batch_count}")
         print("-" * 30)
