@@ -13,6 +13,7 @@ def main():
     playlist_name = input("Please enter the name for the new playlist: ")
     items = []
     tidal_ids = []
+    local_tracks_added = 0
     
     if user_account.lower() != ADMIN_NAME:
         account = MyPlexAccount(admin_username, admin_password)  # Authenticate with MyPlexAccount
@@ -30,8 +31,10 @@ def main():
         artist, title = song_name.split(' - ', 1)
         print(f"Processing {artist} - {title}")
         local_track = find_track_in_library(music_library, artist, title)
+        
         if local_track:
             print("Found in local library.")
+            local_tracks_added += 1  # Increment the count for each added local track
         else:
             print("Not found in local library, searching on Tidal...")
             tidal_id = search_tidal(PLEX_TOKEN, artist, title)
@@ -67,7 +70,7 @@ def main():
         print("\nPlaylist Creation Summary:")
         print("-" * 30)  # Separator line for visual clarity
         print(f"Playlist Name: {playlist_name}")
-        print(f"Local Tracks Added: {local_count}")
+        print(f"Local Tracks Added: {local_tracks_added}")
         print(f"Tidal Tracks Added: {tidal_count}")
         print(f"Total Batches Processed: {batch_count}")
         print("-" * 30)
