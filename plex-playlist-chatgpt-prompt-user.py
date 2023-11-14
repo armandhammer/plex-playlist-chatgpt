@@ -21,23 +21,10 @@ from urllib.parse import quote
 import re
 from unidecode import unidecode
 from fuzzywuzzy import fuzz
+from tqdm import tqdm  # tqdm is a library for progress bars
 
-
-
-# Define constants
-PLEX_URL = 'http://XXX.XXX.X.XXX:32400'   # Enter your server IP
-PLEX_TOKEN = '[YOUR TOKEN]'
-SECTION_TITLE = '[YOUR MUSIC LIBRARY NAME]'   # The name of your music library
-ADMIN_NAME = '[YOUR ADMIN NAME]'
-ADMIN_PASS = '[YOUR ADMIN PASS]'
-
-FUZZ_AMT = 50   # Amount of fuzzy track matching
-
-BATCH_SIZE = 20
-
-PLACEHOLDER_ARTIST = 'LCD Soundsystem'   # Enter a placeholder track that exists in your local library
-PLACEHOLDER_TITLE = 'Dance Yrself Clean'
-
+# Add info to a configuration file "ppg_config.py" in the same directory as the script
+from ppg_config import PLEX_URL, PLEX_TOKEN, SECTION_TITLE, ADMIN_NAME, ADMIN_PASS, FUZZ_AMT, BATCH_SIZE, PLACEHOLDER_ARTIST, PLACEHOLDER_TITLE
 
 class Colors:
     RED = '\033[91m'
@@ -48,14 +35,12 @@ class Colors:
     CYAN = '\033[96m'
     RESET = '\033[0m'
     
-    
 def initialize_plex_server(plex_url: str, plex_token: str) -> PlexServer:
     try:
         return PlexServer(plex_url, plex_token)
     except Exception as e:
         print(f"Error initializing Plex Server: {e}")
         exit()
-
 
 def get_music_library(plex: PlexServer, section_title: str):
     try:
@@ -64,7 +49,6 @@ def get_music_library(plex: PlexServer, section_title: str):
         print(f"Error accessing section by Title: {e}")
         exit()
 
-
 def read_songs_from_file(filename: str) -> list:
     try:
         with open(filename, 'r', encoding='utf-8') as file:
@@ -72,7 +56,6 @@ def read_songs_from_file(filename: str) -> list:
     except FileNotFoundError:
         print(f"{Colors.RED}Error: '{filename}' not found.{Colors.RESET}")
         exit()
-
 
 def simplify_string(input_string: str) -> str:
     input_string = input_string.lower()
@@ -88,8 +71,8 @@ def alternate_name_variation(artist_name: str) -> str:
         return artist_name.replace(" & ", " and ")
     else:
         return artist_name
-
-
+        
+        
 def find_track_in_library(music_library, artist_name: str, track_title: str):
     artist_search = music_library.search(title=artist_name)
     for artist in artist_search:
@@ -125,17 +108,19 @@ def format_query(artist: str, title: str) -> str:
 def search_tidal(plex_token: str, artist: str, title: str):
     date_pattern = r'\d{4}[-\u2013\u2014\u2212/]\d{2}[-\u2013\u2014\u2212/]\d{2}|\d{2}[-\u2013\u2014\u2212/]\d{2}[-\u2013\u2014\u2212/]\d{4}'
     exclude_keywords = ['live', 'concert', 'sbd']
+    final_url = ""  # Initialize the final URL as an empty string
+    tidal_id = None  # Initialize tidal_id as None
 
     def perform_search(query):
+        nonlocal final_url
         encoded_query = quote(query)
-        url = f"https://music.provider.plex.tv/hubs/search?query={encoded_query}&X-Plex-Token={plex_token}"
-        response = requests.get(url)
-        print (url)
+        final_url = f"https://music.provider.plex.tv/hubs/search?query={encoded_query}&X-Plex-Token={plex_token}"
+        response = requests.get(final_url)
         if response.status_code != 200:
             print(f"Error: Unable to search Tidal with query '{query}': {response.status_code}")
             return None
         return ET.ElementTree(ET.fromstring(response.text))
-
+        
     def attempt_match(track, input_artist, input_title):
         artist_title = track.get('originalTitle')
         if artist_title is None or artist_title.lower() == "none":
@@ -144,9 +129,9 @@ def search_tidal(plex_token: str, artist: str, title: str):
         track_title = track.get('title')
         album_title = track.get('parentTitle')
 
-        print(f"grandparentTitle: {track.get('grandparentTitle')}")
-        print(f"originalTitle: {track.get('originalTitle')}")
-        print(f"parentTitle: {album_title}")
+        ##print(f"grandparentTitle: {track.get('grandparentTitle')}")
+        ##print(f"originalTitle: {track.get('originalTitle')}")
+        ##print(f"parentTitle: {album_title}")
 
         if 'various artists' in artist_title.lower():
             match_artist = True  # Assume artist match in case of various artists
@@ -179,24 +164,27 @@ def search_tidal(plex_token: str, artist: str, title: str):
         track_hub = tree.find('./Hub[@type="track"]')
         if track_hub is not None and len(track_hub) > 0:
             for track in track_hub.findall('./Track'):
-                match, tidal_id = attempt_match(track, artist, title)
+                match, temp_tidal_id = attempt_match(track, artist, title)
                 if match:
-                    return tidal_id
+                    tidal_id = temp_tidal_id
+                    break  # Break the loop if a match is found
 
     # Second attempt: If not found, try again without the descriptor
-    simplified_title = re.sub(r"\(.*?\)", "", title).strip()
-    formatted_query = format_query(artist, simplified_title)
-    tree = perform_search(formatted_query)
-    if tree is not None and tree.getroot() is not None:
-        track_hub = tree.find('./Hub[@type="track"]')
-        if track_hub is not None and len(track_hub) > 0:
-            for track in track_hub.findall('./Track'):
-                match, tidal_id = attempt_match(track, artist, simplified_title)
-                if match:
-                    return tidal_id
+    if not tidal_id:  # Only proceed if tidal_id is still None
+        simplified_title = re.sub(r"\(.*?\)", "", title).strip()
+        formatted_query = format_query(artist, simplified_title)
+        tree = perform_search(formatted_query)
+        if tree is not None and tree.getroot() is not None:
+            track_hub = tree.find('./Hub[@type="track"]')
+            if track_hub is not None and len(track_hub) > 0:
+                for track in track_hub.findall('./Track'):
+                    match, temp_tidal_id = attempt_match(track, artist, simplified_title)
+                    if match:
+                        tidal_id = temp_tidal_id
+                        break  # Break the loop if a match is found
 
-    return None
-
+    return tidal_id, final_url  # Always return two values
+    
 
 def add_track_to_playlist(plex_url: str, plex_token: str, tidal_ids: list, playlist_ratingKey: str):
     if not tidal_ids:
@@ -216,6 +204,12 @@ def add_track_to_playlist(plex_url: str, plex_token: str, tidal_ids: list, playl
             print(f"Server says adding Tidal tracks to playlist in batch {i//BATCH_SIZE + 1}: {response.status_code}")
             print(response.text)
 
+
+def format_log_message(message, total_lines=4):
+    current_lines = message.count('\n') + 1
+    additional_lines = total_lines - current_lines
+    return message + '\n' * additional_lines
+
 from plexapi.exceptions import NotFound
 from plexapi.myplex import MyPlexAccount
 
@@ -231,9 +225,19 @@ def main():
     
     music_library = get_music_library(plex, SECTION_TITLE)
     songs = read_songs_from_file(FILENAME)
+    
+    existing_playlists = [playlist.title for playlist in plex.playlists()]
     playlist_name = input("Please enter the name for the new playlist: ")
+    
+    while playlist_name in existing_playlists:
+        print(f"Playlist '{playlist_name}' already exists. Please choose a different name.")
+        playlist_name = input("Please enter the name for the new playlist: ")
+    
     local_items = []
     tidal_ids = []
+    not_found_tracks = []
+    log_messages = []
+    pbar = tqdm(total=len(songs), desc="Processing songs")
     
     if user_account.lower() != ADMIN_NAME:
         account = MyPlexAccount(admin_username, admin_password)  # Authenticate with MyPlexAccount
@@ -247,22 +251,28 @@ def main():
             exit()
     
     for song_name in songs:
-        print(Colors.BLUE + "-" * 10 + Colors.RESET)
         artist, title = song_name.split(' - ', 1)
-        print(f"Processing {artist} - {title}")
-        local_track = find_track_in_library(music_library, artist, title)
+        log_message = f"{Colors.YELLOW}------------------------------{Colors.RESET}\n{Colors.BLUE}Processing {artist} - {title}{Colors.RESET}\n"
 
+        local_track = find_track_in_library(music_library, artist, title)
         if local_track:
-            print(Colors.GREEN + f"Found in local library: {local_track.title}" + Colors.RESET)
+            log_message += f"{Colors.GREEN}Found in local library: {local_track.title}{Colors.RESET}\n\n"
             local_items.append(local_track)
         else:
-            tidal_id = search_tidal(PLEX_TOKEN, artist, title)
+            tidal_id, final_url = search_tidal(PLEX_TOKEN, artist, title)
             if tidal_id:
                 tidal_ids.append(tidal_id)
-                print(Colors.CYAN + f"Found on Tidal: {tidal_id}" + Colors.RESET)
+                log_message += f"{Colors.CYAN}Found on Tidal: {tidal_id}{Colors.RESET}\n\n"
             else:
-                print(Colors.RED + f"Not found on Tidal or local: {artist} - {title}" + Colors.RESET)
+                log_message += f"{Colors.RED}Not found on Tidal or local: {artist} - {title}{Colors.RESET}\n{final_url}\n"
 
+        formatted_message = format_log_message(log_message, total_lines=4)
+        tqdm.write(formatted_message)
+        pbar.update(1)
+
+    pbar.close()
+
+    
     try:
         if local_items:
             local_playlist = plex.createPlaylist(playlist_name, items=local_items)
@@ -277,6 +287,11 @@ def main():
         else:
             print(Colors.YELLOW + "No Tidal tracks to add." + Colors.RESET)
 
+        if not_found_tracks:
+            print("\nTracks not found:")
+            for track in not_found_tracks:
+                print(track)
+            
         # Summary output
         print(f"\n{Colors.MAGENTA}Playlist Creation Summary:{Colors.RESET}")
         print(f"{Colors.YELLOW}-" * 30)  # Separator line for visual clarity
@@ -290,6 +305,10 @@ def main():
     except Exception as e:
         print(f"{Colors.RED}Error creating the playlist or adding tracks: {e}{Colors.RESET}")
 
+    if not_found_tracks:
+        print("\nTracks not found:")
+        for track in not_found_tracks:
+            print(track)
 
 if __name__ == "__main__":
     main()
