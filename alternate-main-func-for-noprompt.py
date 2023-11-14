@@ -5,79 +5,64 @@
 
 def main():
     plex = PlexServer(PLEX_URL, PLEX_TOKEN)
-    admin_username = ADMIN_NAME
-    admin_password = ADMIN_PASS
-    user_account = input("Enter the account to add the playlist to: ")
+    
+    
+    
+    
+    FILENAME = input("Input filename (or Enter for 'playlist.txt'): ").strip()
+    if not FILENAME:
+        FILENAME = 'playlist.txt'
+
     music_library = get_music_library(plex, SECTION_TITLE)
     songs = read_songs_from_file(FILENAME)
     playlist_name = input("Please enter the name for the new playlist: ")
-    items = []
+    local_items = []
     tidal_ids = []
-    local_tracks_added = 0
-    
-    if user_account.lower() != ADMIN_NAME:
-        account = MyPlexAccount(admin_username, admin_password)  # Authenticate with MyPlexAccount
-        
-        try:
-            user = account.user(user_account)  # Try to get non-admin user
-            user_token = user.get_token(plex.machineIdentifier)
-            plex = PlexServer(PLEX_URL, user_token)  # reinitialize plex with user’s token
-        except NotFound:  # Catch the NotFound exception if user is not found
-            print(f"Error: Unable to find user {user_account}")
-            exit()
-    
+
     for song_name in songs:
-        print("-" * 10)
+        print(Colors.BLUE + "-" * 10 + Colors.RESET)
         artist, title = song_name.split(' - ', 1)
         print(f"Processing {artist} - {title}")
         local_track = find_track_in_library(music_library, artist, title)
-        
+
         if local_track:
-            print("Found in local library.")
-            local_tracks_added += 1  # Increment the count for each added local track
+            print(Colors.GREEN + f"Found in local library: {local_track.title}" + Colors.RESET)
+            local_items.append(local_track)
         else:
-            print("Not found in local library, searching on Tidal...")
             tidal_id = search_tidal(PLEX_TOKEN, artist, title)
             if tidal_id:
-                print("Found on Tidal")
                 tidal_ids.append(tidal_id)
+                print(Colors.CYAN + f"Found on Tidal: {tidal_id}" + Colors.RESET)
             else:
-                print("Not found on Tidal")
-
-    placeholder_track = find_track_in_library(music_library, PLACEHOLDER_ARTIST, PLACEHOLDER_TITLE)
-    if not placeholder_track:
-        print("Placeholder track not found.")
-        return
+                print(Colors.RED + f"Not found on Tidal or local: {artist} - {title}" + Colors.RESET)
 
     try:
-        local_playlist = plex.createPlaylist(playlist_name, items=[placeholder_track])
-        playlist_ratingKey = local_playlist.ratingKey
+        if local_items:
+            local_playlist = plex.createPlaylist(playlist_name, items=local_items)
+            ## print(Colors.GREEN + f"Local playlist '{playlist_name}' created with {len(local_items)} tracks." + Colors.RESET)
+        else:
+            print(Colors.YELLOW + "No local tracks found to create a playlist." + Colors.RESET)
 
-        local_count = len(items)
-        
-        tidal_count = len(tidal_ids)
-        batch_count = 0
+        tidal_track_count = 0
+        if tidal_ids:
+            tidal_track_count = len(tidal_ids)
+            add_track_to_playlist(PLEX_URL, PLEX_TOKEN, tidal_ids, local_playlist.ratingKey)
+        else:
+            print(Colors.YELLOW + "No Tidal tracks to add." + Colors.RESET)
 
-        for track in items:
-            add_track_to_playlist(PLEX_URL, PLEX_TOKEN, [track.ratingKey], playlist_ratingKey)
-        for i in range(0, len(tidal_ids), BATCH_SIZE):
-            batch_ids = tidal_ids[i:i + BATCH_SIZE]
-            add_track_to_playlist(PLEX_URL, PLEX_TOKEN, batch_ids, playlist_ratingKey)
-            batch_count += 1
-
-        local_playlist.removeItems([placeholder_track])
         # Summary output
-        print("\nPlaylist Creation Summary:")
-        print("-" * 30)  # Separator line for visual clarity
-        print(f"Playlist Name: {playlist_name}")
-        print(f"Local Tracks Added: {local_tracks_added}")
-        print(f"Tidal Tracks Added: {tidal_count}")
-        print(f"Total Batches Processed: {batch_count}")
-        print("-" * 30)
-        print("The playlist has been created and tracks have been added successfully.")
+        print(f"\n{Colors.MAGENTA}Playlist Creation Summary:{Colors.RESET}")
+        print(f"{Colors.YELLOW}-" * 30)  # Separator line for visual clarity
+        print(f"{Colors.CYAN}Playlist Name: {playlist_name}{Colors.RESET}")
+        print(f"{Colors.GREEN}Local Tracks Added: {len(local_items)}{Colors.RESET}")
+        print(f"{Colors.BLUE}Tidal Tracks Added: {tidal_track_count}{Colors.RESET}")
+        print(f"{Colors.RED}Total Batches Processed: {len(tidal_ids) // BATCH_SIZE + (1 if len(tidal_ids) % BATCH_SIZE > 0 else 0)}{Colors.RESET}")
+        print(f"{Colors.YELLOW}-" * 30)
+        print(f"{Colors.GREEN}The playlist has been created and tracks have been added successfully.{Colors.RESET}")
 
     except Exception as e:
-        print(f"Error creating the playlist or adding tracks: {e}")
+        print(f"{Colors.RED}Error creating the playlist or adding tracks: {e}{Colors.RESET}")
+
 
 if __name__ == "__main__":
     main()
