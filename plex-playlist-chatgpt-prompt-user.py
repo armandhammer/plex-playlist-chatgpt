@@ -25,15 +25,17 @@ from fuzzywuzzy import fuzz
 
 
 # Define constants
-PLEX_URL = 'http://192.168.0.214:32400'  # Enter your server IP
-PLEX_TOKEN = 'GCoryt2sy6ygXrvRTUEm'
-SECTION_TITLE = 'Music'     # The name of your music library
-ADMIN_NAME = 'bengarland'
-ADMIN_PASS = 'krhSQ9L7Fhuogw'
-FUZZ_AMT = 50               # Amount of fuzzy track matching
+PLEX_URL = 'http://XXX.XXX.X.XXX:32400'   # Enter your server IP
+PLEX_TOKEN = '[YOUR TOKEN]'
+SECTION_TITLE = '[YOUR MUSIC LIBRARY NAME]'   # The name of your music library
+ADMIN_NAME = '[YOUR ADMIN NAME]'
+ADMIN_PASS = '[YOUR ADMIN PASS]'
+
+FUZZ_AMT = 50   # Amount of fuzzy track matching
 
 BATCH_SIZE = 20
-PLACEHOLDER_ARTIST = 'LCD Soundsystem'
+
+PLACEHOLDER_ARTIST = 'LCD Soundsystem'   # Enter a placeholder track that exists in your local library
 PLACEHOLDER_TITLE = 'Dance Yrself Clean'
 
 
